@@ -572,14 +572,5 @@ export const getProviderDetailServerFn = createServerFn({ method: "POST" })
     return data ?? null;
   });
 
-export const getAdminProvidersServerFn = createServerFn({ method: "GET" })
-  .handler(async (): Promise<any[]> => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
-      .from("providers")
-      .select("*, categories(id,name), areas(id,name), experience_options(id,label)")
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    return (data ?? []) as any[];
-  });
+export { getAdminProvidersServerFn } from "./admin-actions.functions";
 

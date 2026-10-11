@@ -23,6 +23,7 @@ export function useAll() {
           }
         }
       } catch (err) {
+        console.warn("[admin:providers] getAdminProvidersServerFn fallback:", err);
         // Fall back to client supabase query if server function is unreachable or not permitted
         let { data, error } = await supabase
           .from("providers")

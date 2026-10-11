@@ -27,16 +27,29 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
+function getRuntimeEnvVar(key: string): string {
+  if (typeof globalThis !== 'undefined') {
+    const cfEnv = (globalThis as any).__env__;
+    if (cfEnv && typeof cfEnv === 'object' && cfEnv[key] !== undefined && cfEnv[key] !== null) {
+      return String(cfEnv[key]);
+    }
+  }
+  if (typeof process !== 'undefined' && process?.env && process.env[key] !== undefined && process.env[key] !== null) {
+    return String(process.env[key]);
+  }
+  return '';
+}
+
 function createSupabaseAdminClient() {
   const SUPABASE_URL = (
-    process.env['VITE_SUPABASE_URL'] ||
-    process.env['SUPABASE_URL'] ||
+    getRuntimeEnvVar('VITE_SUPABASE_URL') ||
+    getRuntimeEnvVar('SUPABASE_URL') ||
     ''
   ).replace(/^["']|["']$/g, '').trim();
 
   const serviceRoleKey = (
-    process.env['SUPABASE_SERVICE_ROLE_KEY'] ||
-    process.env['SUPABASE_SERVICE_KEY'] ||
+    getRuntimeEnvVar('SUPABASE_SERVICE_ROLE_KEY') ||
+    getRuntimeEnvVar('SUPABASE_SERVICE_KEY') ||
     ''
   ).replace(/^["']|["']$/g, '').trim();
 
@@ -60,16 +73,35 @@ function createSupabaseAdminClient() {
   });
 }
 
-let _supabaseAdmin: ReturnType<typeof createSupabaseAdminClient> | undefined;
+const _adminClientsCache = new Map<string, ReturnType<typeof createSupabaseAdminClient>>();
+
+function getSupabaseAdminInstance() {
+  const SUPABASE_URL = (
+    getRuntimeEnvVar('VITE_SUPABASE_URL') ||
+    getRuntimeEnvVar('SUPABASE_URL') ||
+    ''
+  ).replace(/^["']|["']$/g, '').trim();
+
+  const serviceRoleKey = (
+    getRuntimeEnvVar('SUPABASE_SERVICE_ROLE_KEY') ||
+    getRuntimeEnvVar('SUPABASE_SERVICE_KEY') ||
+    ''
+  ).replace(/^["']|["']$/g, '').trim();
+
+  const cacheKey = `${SUPABASE_URL}::${serviceRoleKey}`;
+  let client = _adminClientsCache.get(cacheKey);
+  if (!client) {
+    client = createSupabaseAdminClient();
+    _adminClientsCache.set(cacheKey, client);
+  }
+  return client;
+}
 
 // Server-side Supabase client with service role - bypasses RLS
 // SECURITY: Only use this for trusted server-side operations, never expose to client code
 export const supabaseAdmin = new Proxy({} as ReturnType<typeof createSupabaseAdminClient>, {
   get(_, prop, receiver) {
-    if (!_supabaseAdmin) {
-      _supabaseAdmin = createSupabaseAdminClient();
-    }
-    const target = _supabaseAdmin as any;
+    const target = getSupabaseAdminInstance() as any;
     const value = target[prop];
     if (typeof value === 'function') {
       return value.bind(target);

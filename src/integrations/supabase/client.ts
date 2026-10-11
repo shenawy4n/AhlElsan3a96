@@ -31,6 +31,7 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 function createSupabaseClient() {
   const isServer = typeof window === 'undefined';
   const procEnv = typeof process !== 'undefined' && process?.env ? process.env : undefined;
+  const cfEnv = typeof globalThis !== 'undefined' && (globalThis as any).__env__ ? (globalThis as any).__env__ : undefined;
 
   let viteUrl = '';
   let viteKey = '';
@@ -51,6 +52,8 @@ function createSupabaseClient() {
 
   let SUPABASE_URL = (
     (!isServer ? viteUrl : '') ||
+    cfEnv?.['VITE_SUPABASE_URL'] ||
+    cfEnv?.['SUPABASE_URL'] ||
     procEnv?.['VITE_SUPABASE_URL'] ||
     procEnv?.['SUPABASE_URL'] ||
     ''
@@ -58,6 +61,9 @@ function createSupabaseClient() {
 
   let SUPABASE_PUBLISHABLE_KEY = (
     (!isServer ? viteKey : '') ||
+    cfEnv?.['VITE_SUPABASE_PUBLISHABLE_KEY'] ||
+    cfEnv?.['SUPABASE_PUBLISHABLE_KEY'] ||
+    cfEnv?.['SUPABASE_ANON_KEY'] ||
     procEnv?.['VITE_SUPABASE_PUBLISHABLE_KEY'] ||
     procEnv?.['SUPABASE_PUBLISHABLE_KEY'] ||
     procEnv?.['SUPABASE_ANON_KEY'] ||
