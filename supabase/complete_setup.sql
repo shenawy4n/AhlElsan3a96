@@ -659,7 +659,9 @@ REVOKE INSERT ON public.reports FROM anon;
 REVOKE INSERT ON public.service_suggestions FROM anon;
 
 -- Grants for RPCs
-GRANT EXECUTE ON FUNCTION public.contact_provider(uuid, text) TO anon, authenticated;
+-- Keep direct PostgREST access disabled; contacts must pass through the rate-limited server gateway.
+REVOKE EXECUTE ON FUNCTION public.contact_provider(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.contact_provider(uuid, text) TO service_role;
 REVOKE EXECUTE ON FUNCTION public.admin_add(text), public.admin_set_active(uuid, boolean), public.admin_revoke(uuid), public.my_admin_level() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_add(text), public.admin_set_active(uuid, boolean), public.admin_revoke(uuid), public.my_admin_level() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.approve_application(uuid), public.reject_application(uuid, text) TO authenticated;
