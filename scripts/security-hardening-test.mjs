@@ -328,11 +328,11 @@ async function runSecuritySuite() {
   console.log();
 
   // ----------------------------------------------------------------------------
-  // Test E — contact_provider RPC 'phone_click' Action
+  // Test E — Direct Unauthorized contact_provider RPC 'phone_click' Action
   // ----------------------------------------------------------------------------
-  console.log("--- Test E: Contact Gateway 'phone_click' Action ---");
+  console.log("--- Test E: Direct Unauthorized contact_provider RPC 'phone_click' Action ---");
   if (!sampleProvider) {
-    recordResult("Test E", "contact_provider phone_click disclosure", "BLOCKED", "No active sample provider available");
+    recordResult("Test E", "Direct anonymous contact_provider phone_click denied", "BLOCKED", "No active sample provider available");
   } else {
     try {
       const { data, error } = await anonClient.rpc("contact_provider", {
@@ -341,44 +341,51 @@ async function runSecuritySuite() {
       });
 
       if (error) {
-        recordResult("Test E", "contact_provider phone_click disclosure", "FAIL", `RPC error: ${error.message}`);
-      } else if (!Array.isArray(data) || data.length === 0) {
-        recordResult("Test E", "contact_provider phone_click disclosure", "FAIL", "Empty response from RPC");
-      } else {
-        const row = data[0];
-        const rowKeys = Object.keys(row);
-        const hasPrimaryPhone = Boolean(row.phone);
-        const whatsappNotExposed = row.whatsapp === null || row.whatsapp === undefined;
-        const secondaryNotDisclosed = !row.secondary_phone;
+        const isPermissionDenied =
+          error.code === "42501" ||
+          error.message?.toLowerCase().includes("permission denied") ||
+          error.message?.toLowerCase().includes("not allowed");
 
-        if (hasPrimaryPhone && whatsappNotExposed && secondaryNotDisclosed) {
+        if (isPermissionDenied) {
           recordResult(
             "Test E",
-            "contact_provider phone_click disclosure",
+            "Direct anonymous contact_provider phone_click denied",
             "PASS",
-            `Primary phone returned; whatsapp masked; secondary_phone absent/null. Keys returned: [${rowKeys.join(", ")}]`
+            `Unauthorized direct RPC access strictly denied by database RBAC: ${error.message} (Code: ${error.code || "42501"})`
           );
         } else {
           recordResult(
             "Test E",
-            "contact_provider phone_click disclosure",
-            "FAIL",
-            `Disclosed fields violation. Row: ${JSON.stringify(row)}`
+            "Direct anonymous contact_provider phone_click denied",
+            "BLOCKED",
+            `Inconclusive non-auth RPC error: ${error.message} (Code: ${error.code || "unknown"})`
           );
         }
+      } else {
+        recordResult(
+          "Test E",
+          "Direct anonymous contact_provider phone_click denied",
+          "FAIL",
+          `CRITICAL: Anonymous caller bypassed server gateway and executed contact_provider directly. Data returned: ${JSON.stringify(data)}`
+        );
       }
     } catch (err) {
-      recordResult("Test E", "contact_provider phone_click disclosure", "FAIL", err.message);
+      recordResult(
+        "Test E",
+        "Direct anonymous contact_provider phone_click denied",
+        "BLOCKED",
+        `Inconclusive network/client exception: ${err.message}`
+      );
     }
   }
   console.log();
 
   // ----------------------------------------------------------------------------
-  // Test F — contact_provider RPC 'whatsapp_click' Action
+  // Test F — Direct Unauthorized contact_provider RPC 'whatsapp_click' Action
   // ----------------------------------------------------------------------------
-  console.log("--- Test F: Contact Gateway 'whatsapp_click' Action ---");
+  console.log("--- Test F: Direct Unauthorized contact_provider RPC 'whatsapp_click' Action ---");
   if (!sampleProvider) {
-    recordResult("Test F", "contact_provider whatsapp_click disclosure", "BLOCKED", "No active sample provider available");
+    recordResult("Test F", "Direct anonymous contact_provider whatsapp_click denied", "BLOCKED", "No active sample provider available");
   } else {
     try {
       const { data, error } = await anonClient.rpc("contact_provider", {
@@ -387,33 +394,41 @@ async function runSecuritySuite() {
       });
 
       if (error) {
-        recordResult("Test F", "contact_provider whatsapp_click disclosure", "FAIL", `RPC error: ${error.message}`);
-      } else if (!Array.isArray(data) || data.length === 0) {
-        recordResult("Test F", "contact_provider whatsapp_click disclosure", "FAIL", "Empty response from RPC");
-      } else {
-        const row = data[0];
-        const rowKeys = Object.keys(row);
-        const phoneNotDisclosed = row.phone === null || row.phone === undefined;
-        const secondaryNotDisclosed = !row.secondary_phone;
+        const isPermissionDenied =
+          error.code === "42501" ||
+          error.message?.toLowerCase().includes("permission denied") ||
+          error.message?.toLowerCase().includes("not allowed");
 
-        if (phoneNotDisclosed && secondaryNotDisclosed) {
+        if (isPermissionDenied) {
           recordResult(
             "Test F",
-            "contact_provider whatsapp_click disclosure",
+            "Direct anonymous contact_provider whatsapp_click denied",
             "PASS",
-            `Phone masked; secondary_phone absent/null. Keys returned: [${rowKeys.join(", ")}]`
+            `Unauthorized direct RPC access strictly denied by database RBAC: ${error.message} (Code: ${error.code || "42501"})`
           );
         } else {
           recordResult(
             "Test F",
-            "contact_provider whatsapp_click disclosure",
-            "FAIL",
-            `Disclosed unrelated fields. Row: ${JSON.stringify(row)}`
+            "Direct anonymous contact_provider whatsapp_click denied",
+            "BLOCKED",
+            `Inconclusive non-auth RPC error: ${error.message} (Code: ${error.code || "unknown"})`
           );
         }
+      } else {
+        recordResult(
+          "Test F",
+          "Direct anonymous contact_provider whatsapp_click denied",
+          "FAIL",
+          `CRITICAL: Anonymous caller bypassed server gateway and executed contact_provider directly. Data returned: ${JSON.stringify(data)}`
+        );
       }
     } catch (err) {
-      recordResult("Test F", "contact_provider whatsapp_click disclosure", "FAIL", err.message);
+      recordResult(
+        "Test F",
+        "Direct anonymous contact_provider whatsapp_click denied",
+        "BLOCKED",
+        `Inconclusive network/client exception: ${err.message}`
+      );
     }
   }
   console.log();
