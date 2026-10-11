@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Share2 } from "lucide-react";
-import { callProvider, whatsappProvider, shareProviderViaWhatsapp } from "@/lib/contact";
+import { callProvider, whatsappProvider, shareProviderViaWhatsapp, RateLimitError } from "@/lib/contact";
 
 export interface ProviderShareInfo {
   name: string;
@@ -30,9 +30,13 @@ export function ContactButtons({
     setBusy(true);
     try {
       await fn();
-    } catch {
-      if (isPhone) setNoPhone(true);
-      toast.error(isPhone ? "رقم الهاتف غير متاح حالياً" : "واتساب غير متاح حالياً");
+    } catch (err: unknown) {
+      if (err instanceof RateLimitError || (err instanceof Error && err.message === "rate_limited")) {
+        toast.error("طلبات اتصال كثيرة في وقت قصير، يرجى المحاولة بعد قليل");
+      } else {
+        if (isPhone) setNoPhone(true);
+        toast.error(isPhone ? "رقم الهاتف غير متاح حالياً" : "واتساب غير متاح حالياً");
+      }
     } finally {
       setBusy(false);
     }

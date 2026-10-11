@@ -1,27 +1,46 @@
-import { supabase } from "@/integrations/supabase/client";
-import { telHref, whatsappHref, normalizeEgPhone } from "@/lib/directory";
+import { telHref, whatsappHref } from "@/lib/directory";
+import { contactProviderServerFn } from "@/lib/contact.functions";
 
 export type ContactKind = "phone_click" | "whatsapp_click";
 type ContactResult = { phone: string | null; whatsapp: string | null };
 
 export class NoNumberError extends Error {}
+export class RateLimitError extends Error {}
 
 const last = new Map<string, number>();
 const cache = new Map<string, ContactResult>();
 
 /**
- * Logs the event server-side (awaited, so it is saved before navigation) and returns the number.
- * Rapid repeat taps within 3s reuse the cached number without logging a duplicate event.
+ * Requests contact details securely through the server-side gateway with rate limiting and audit logging.
+ * Rapid repeat taps within 3s reuse the cached number without sending unnecessary server calls.
  */
 async function contact(providerId: string, kind: ContactKind): Promise<ContactResult | null> {
   const key = `${providerId}:${kind}`;
   const now = Date.now();
   if (now - (last.get(key) ?? 0) < 3000 && cache.has(key)) return cache.get(key)!;
   last.set(key, now);
-  const { data, error } = await supabase.rpc("contact_provider" as never, { _provider_id: providerId, _kind: kind } as never);
-  if (error) { last.delete(key); throw error; }
-  const row = (data as unknown as ContactResult[] | null)?.[0] ?? null;
-  if (row) cache.set(key, row);
+
+  const res = await contactProviderServerFn({
+    data: {
+      providerId,
+      kind,
+    },
+  });
+
+  if (!res.ok) {
+    last.delete(key);
+    if (res.code === "rate_limited") {
+      throw new RateLimitError("rate_limited");
+    }
+    throw new Error(res.code);
+  }
+
+  const row: ContactResult = {
+    phone: res.phone,
+    whatsapp: res.whatsapp,
+  };
+
+  cache.set(key, row);
   return row;
 }
 
@@ -60,7 +79,6 @@ export async function shareProviderViaWhatsapp(provider: {
 }) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const profileUrl = `${origin}/provider/${provider.id}`;
-
   const lines = [
     `صنايعي موثوق من «أهل الصنعة» 🛠️`,
     ``,
@@ -74,8 +92,6 @@ export async function shareProviderViaWhatsapp(provider: {
     ``,
     `أهل الصنعة — كل صنعة عند أهلها`,
   ].filter(Boolean);
-
   const text = lines.join("\n");
   open(`https://wa.me/?text=${encodeURIComponent(text)}`, true);
 }
-

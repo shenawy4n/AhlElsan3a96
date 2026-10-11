@@ -160,8 +160,24 @@ async function runRegressionTests() {
   });
 
   it("track.ts excludes phone_reveal from tracked event types", () => {
-    const trackSrc = readFileSync(resolve("src/lib/track.ts"), "utf-8");
-    assert.ok(!trackSrc.includes('"phone_reveal"'), "track.ts must not include 'phone_reveal'");
+    const trackSrc = readFileSync(resolve("src/lib/track.ts"), "utf8");
+    assert.ok(!trackSrc.includes('"phone_reveal"'), "track.ts must not include phone_reveal");
+  });
+
+  it("contact.functions.ts routes requests via canonical supabaseAdmin.rpc contact_provider path", () => {
+    const fnSrc = readFileSync(resolve("src/lib/contact.functions.ts"), "utf8");
+    assert.ok(
+      fnSrc.includes("supabaseAdmin.rpc(\"contact_provider\""),
+      "contactProviderServerFn must invoke contact_provider RPC via service_role client"
+    );
+    assert.ok(
+      fnSrc.includes("checkCurrentRequestRateLimit(\"provider_contact\")"),
+      "contactProviderServerFn must enforce rate limiting before DB query"
+    );
+    assert.ok(
+      !fnSrc.includes("secondary_phone"),
+      "contactProviderServerFn must never expose or return secondary_phone"
+    );
   });
 
   console.log();
@@ -326,6 +342,14 @@ async function runRegressionTests() {
     assert.ok(
       sql.includes("CREATE OR REPLACE FUNCTION public.admin_get_providers()"),
       "admin_get_providers must enforce RBAC authorization check"
+    );
+    assert.ok(
+      sql.includes("REVOKE EXECUTE ON FUNCTION public.contact_provider(uuid, text) FROM PUBLIC, anon, authenticated;"),
+      "contact_provider must revoke EXECUTE from PUBLIC, anon, authenticated"
+    );
+    assert.ok(
+      sql.includes("GRANT EXECUTE ON FUNCTION public.contact_provider(uuid, text) TO service_role;"),
+      "contact_provider must grant EXECUTE exclusively to service_role"
     );
   });
 
