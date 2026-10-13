@@ -149,7 +149,7 @@ export function Categories({
             maxLength={40}
           />
           <span className="text-xs text-muted-foreground">
-            يظهر في الصفحة الرئيسية على شكل: «متاح ١ {form.unit_title.trim() || detectedUnit}». التلقائي للطب «طبيب»، وللتعليم «مدرس»، وللحرف «عامل».
+            يظهر في الصفحة الرئيسية على شكل: «متاح ١ {form.unit_title.trim() || detectedUnit}». يُستنتج تلقائياً مسمى المهنة لكل تخصص (مثل «كهربائي»، «سباك»، «طبيب»)، والافتراضي العام «مقدم خدمة».
           </span>
         </label>
 

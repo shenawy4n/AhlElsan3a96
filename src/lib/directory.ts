@@ -159,40 +159,72 @@ export const categoryCountsQuery = {
 };
 
 /**
- * Returns the designation unit for providers under a given category
- * (e.g. طب -> طبيب, تعليم -> مدرس, default -> عامل)
+ * Returns the designation unit/occupation title for providers under a given category
+ * following the 4-tier priority:
+ * 1. Valid existing custom category unit title or explicit unit value.
+ * 2. Reliable mapping from an existing category name to a specific Egyptian occupation title.
+ * 3. The original category name if it exists but cannot be reliably mapped to a specific occupation.
+ * 4. "مقدم خدمة" only when neither a valid occupation nor a usable category name is available.
  */
-export function getCategoryUnit(categoryName: string, customUnit?: string | null): string {
-  if (customUnit && customUnit.trim()) {
+export function getCategoryUnit(categoryName?: string | null, customUnit?: string | null): string {
+  // 1. Valid existing custom category unit title or explicit unit value
+  if (customUnit && typeof customUnit === "string" && customUnit.trim()) {
     return customUnit.trim();
   }
-  const clean = categoryName.trim();
-  if (/طب|طبيب|أطباء|دكتور|دكاترة|عياد|علاج|مستشفى|صيدل/i.test(clean)) {
-    return "طبيب";
+
+  const raw = (categoryName || "").trim();
+  if (!raw) {
+    // 4. "مقدم خدمة" only when neither a valid occupation nor a usable category name is available
+    return "مقدم خدمة";
   }
-  if (/تعليم|مدرس|مدرسين|معلم|دروس|تدريس|أستاذ/i.test(clean)) {
-    return "مدرس";
-  }
-  if (/هندس|مهندس/i.test(clean)) {
-    return "مهندس";
-  }
-  if (/محام|قانون/i.test(clean)) {
-    return "محامي";
-  }
-  if (/تمريض|ممرض/i.test(clean)) {
-    return "ممرض";
-  }
-  return "عامل";
+
+  // 2. Reliable mapping from an existing category name to a specific Egyptian occupation title
+  // Medical & Healthcare
+  if (/(?:طب|طبيب|أطباء|دكتور|دكاترة|عيادات?|علاج|مستشفى|صيدل)/i.test(raw)) return "طبيب";
+  if (/(?:تمريض|ممرض)/i.test(raw)) return "ممرض";
+
+  // Education
+  if (/(?:تعليم|مدرس|مدرسين|معلم|دروس|تدريس|أستاذ)/i.test(raw)) return "مدرس";
+
+  // Engineering & Law & Accounting
+  if (/(?:هندس|مهندس)/i.test(raw)) return "مهندس";
+  if (/(?:محام|قانون)/i.test(raw)) return "محامي";
+  if (/(?:محاسب|حسابات)/i.test(raw)) return "محاسب";
+
+  // Egyptian Crafts & Trades
+  if (/(?:كهربا|كهربائي)/i.test(raw)) return "كهربائي";
+  if (/(?:سباك|سباكة)/i.test(raw)) return "سباك";
+  if (/(?:نجار|نجارة)/i.test(raw)) return "نجار";
+  if (/(?:نقاش|نقاشة|دهانات?)/i.test(raw)) return "نقاش";
+  if (/(?:حداد|حدادة)/i.test(raw)) return "حداد";
+  if (/(?:ميكانيك|ميكانيكا|ميكانيكي)/i.test(raw)) return "ميكانيكي";
+  if (/(?:سمكر|سمكرة|سمكري)/i.test(raw)) return "سمكري";
+  if (/(?:سيراميك)/i.test(raw)) return "فني سيراميك";
+  if (/(?:ألوميتال|الوميتال)/i.test(raw)) return "فني ألوميتال";
+  if (/(?:رخام)/i.test(raw)) return "فني رخام";
+  if (/(?:محار|محارة|مبيض\s*محار)/i.test(raw)) return "مبيض محارة";
+  if (/(?:دش|رسيفر)/i.test(raw)) return "فني دش ورسيفر";
+  if (/(?:كاميرات|مراقبة|انظمة\s*مراقبة)/i.test(raw)) return "فني كاميرات مراقبة";
+  if (/(?:ترزي|خياط)/i.test(raw)) return "ترزي";
+  if (/(?:حلاق|حلاقة)/i.test(raw)) return "حلاق";
+  if (/(?:زجاج|ازاز)/i.test(raw)) return "فني زجاج";
+  if (/(?:مصور|تصوير)/i.test(raw)) return "مصور";
+  if (/(?:نقل|مواصلات|سائق|سواق)/i.test(raw)) return "سائق";
+  if (/(?:بناء|بنا|عامل\s*بناء)/i.test(raw)) return "بَنّاء";
+
+  // 3. The original category name if it exists but cannot be reliably mapped to a specific occupation
+  return raw;
 }
 
 /**
- * Formats small notice: e.g. "متاح ١ عامل", "متاح ٢ طبيب", "متاح ٣ مدرس", or "لا يوجد حالياً"
+ * Formats small notice: e.g. "متاح ١ كهربائي", "متاح ٢ طبيب", or "لا يوجد حالياً"
  */
-export function formatAvailableNotice(count: number, unit: string): string {
+export function formatAvailableNotice(count: number, unit?: string | null): string {
   if (count <= 0) {
     return "لا يوجد حالياً";
   }
-  return `متاح ${count} ${unit}`;
+  const cleanUnit = (unit && unit.trim()) ? unit.trim() : "مقدم خدمة";
+  return `متاح ${count} ${cleanUnit}`;
 }
 
 export interface ProvidersTotals {

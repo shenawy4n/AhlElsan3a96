@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Star, MapPin, BadgeCheck, Award, Zap, Building2 } from "lucide-react";
-import { isPremiumActive, type PublicProvider as ProviderWithRefs } from "@/lib/directory";
+import { isPremiumActive, getCategoryUnit, type PublicProvider as ProviderWithRefs } from "@/lib/directory";
 import { ContactButtons } from "@/components/ContactButtons";
 import { parseWorkingHours, getOpenStatus } from "@/lib/working-hours";
 
@@ -131,7 +131,9 @@ export function ProviderCard({
         </div>
         <div className="mt-1 flex items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">
-            <span className="font-bold text-primary">{provider.categories?.name}</span>
+            <span className="font-bold text-primary">
+              {getCategoryUnit(provider.categories?.name, (provider.categories as any)?.unit_title)}
+            </span>
             <span className="mx-1.5">·</span>
             <MapPin className="inline size-3.5 align-[-2px]" /> {provider.areas?.name}
           </p>

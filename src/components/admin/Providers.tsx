@@ -3,7 +3,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Eye, EyeOff, Star, BadgeCheck, AlertTriangle, ExternalLink, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { isPremiumActive, settingsQuery, type Area, type Category, type ExperienceOption, type ProviderWithRefs, normalizeEgPhone } from "@/lib/directory";
+import { isPremiumActive, settingsQuery, getCategoryUnit, type Area, type Category, type ExperienceOption, type ProviderWithRefs, normalizeEgPhone } from "@/lib/directory";
 import { input, btnGhost, useAll, isFlagged } from "./shared";
 import { WorkingHoursEditor } from "./WorkingHoursEditor";
 import { ProviderPhotoUploader } from "./ProviderPhotoUploader";
@@ -213,7 +213,7 @@ export function Providers({
               {p.status !== "active" ? <span className="text-xs text-destructive">(مخفي)</span> : null}{" "}
               {isFlagged(p) ? <AlertTriangle className="inline size-4 text-destructive" /> : null}
             </p>
-            <p className="truncate text-sm text-muted-foreground">{p.categories?.name ?? "—"} · {p.areas?.name ?? "—"} · <span dir="ltr">{p.phone}</span>{p.experience_options ? ` · ${p.experience_options.label}` : ""}</p>
+            <p className="truncate text-sm text-muted-foreground">{getCategoryUnit(p.categories?.name, (p.categories as any)?.unit_title)} · {p.areas?.name ?? "—"} · <span dir="ltr">{p.phone}</span>{p.experience_options ? ` · ${p.experience_options.label}` : ""}</p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-0.5">
             <a

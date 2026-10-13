@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, MapPin, Clock, Wallet, Wrench, Flag, Award } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { isPremiumActive, providerQuery } from "@/lib/directory";
+import { isPremiumActive, providerQuery, getCategoryUnit } from "@/lib/directory";
 import { PremiumBadge, VerifiedBadge, ProviderRatingBadge, EmergencyBadge } from "@/components/ProviderCard";
 import { parseWorkingHours } from "@/lib/working-hours";
 import { ContactButtons } from "@/components/ContactButtons";
@@ -102,7 +102,9 @@ function ProviderPage() {
               </div>
               <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-base text-muted-foreground">
-                  <span className="font-bold text-primary">{p.categories?.name}</span>
+                  <span className="font-bold text-primary">
+                    {getCategoryUnit(p.categories?.name, (p.categories as any)?.unit_title)}
+                  </span>
                   <span className="mx-1.5">·</span>
                   <MapPin className="inline size-4 align-[-2px]" /> {p.areas?.name}
                 </p>
