@@ -43,7 +43,7 @@ export type Provider = {
 
 export type ProviderWithRefs = Provider & {
   has_whatsapp?: boolean;
-  categories: { id: string; name: string } | null;
+  categories: { id: string; name: string; unit_title?: string | null } | null;
   areas: { id: string; name: string } | null;
   experience_options: { id: string; label: string } | null;
   average_rating?: number;
@@ -120,12 +120,26 @@ export const categoriesQuery = {
     } catch {
       // fallback
     }
-    const { data } = await supabase
-      .from("categories")
-      .select("id,name,icon,sort_order,status")
-      .eq("status", "active")
-      .order("sort_order");
-    return (data ?? []) as Category[];
+    const [catsRes, settingsRes] = await Promise.all([
+      supabase
+        .from("categories")
+        .select("id,name,icon,sort_order,status")
+        .eq("status", "active")
+        .order("sort_order"),
+      supabase
+        .from("app_settings")
+        .select("key,value")
+        .like("key", "cat_unit_%"),
+    ]);
+    const settingsMap: Record<string, string> = {};
+    for (const s of (settingsRes.data ?? []) as { key: string; value: string }[]) {
+      if (s.key && s.value) settingsMap[s.key] = s.value;
+    }
+    const cats = (catsRes.data ?? []) as Category[];
+    for (const c of cats) {
+      c.unit_title = settingsMap[`cat_unit_${c.id}`]?.trim() || c.unit_title || null;
+    }
+    return cats;
   },
 };
 

@@ -103,7 +103,7 @@ function ProviderPage() {
               <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-base text-muted-foreground">
                   <span className="font-bold text-primary">
-                    {getCategoryUnit(p.categories?.name, (p.categories as any)?.unit_title)}
+                    {getCategoryUnit(p.categories?.name, (p.categories as any)?.unit_title || (p as any).category_unit_title)}
                   </span>
                   <span className="mx-1.5">·</span>
                   <MapPin className="inline size-4 align-[-2px]" /> {p.areas?.name}

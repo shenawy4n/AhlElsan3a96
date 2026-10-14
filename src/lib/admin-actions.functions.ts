@@ -20,16 +20,33 @@ export const getAdminProvidersServerFn = createServerFn({ method: "GET" })
         .order("created_at", { ascending: false });
 
       if (!fallback.error && Array.isArray(fallback.data)) {
-        return fallback.data as unknown as ProviderWithRefs[];
+        data = fallback.data as any;
+      } else {
+        console.error("[getAdminProvidersServerFn error]", error);
+        throw new Response(
+          JSON.stringify({ ok: false, message: error.message || "Failed to load providers" }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
       }
-
-      console.error("[getAdminProvidersServerFn error]", error);
-      throw new Response(
-        JSON.stringify({ ok: false, message: error.message || "Failed to load providers" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
     }
-    return (data ?? []) as unknown as ProviderWithRefs[];
+
+    const { data: unitSettings } = await supabaseAdmin
+      .from("app_settings")
+      .select("key, value")
+      .like("key", "cat_unit_%");
+    const unitsMap: Record<string, string> = {};
+    for (const u of (unitSettings ?? []) as { key: string; value: string }[]) {
+      if (u.key && u.value) unitsMap[u.key] = u.value;
+    }
+    const list = (data ?? []) as unknown as ProviderWithRefs[];
+    for (const p of list) {
+      const catId = (p as any).category_id || (p as any).categories?.id;
+      const customUnit = catId ? unitsMap[`cat_unit_${catId}`]?.trim() : undefined;
+      if ((p as any).categories) {
+        (p as any).categories.unit_title = customUnit || (p as any).categories.unit_title || null;
+      }
+    }
+    return list;
   });
 
 function normalizeArabicCategory(str: string): string {

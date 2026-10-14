@@ -96,6 +96,44 @@ async function getCachedAreas(client: any): Promise<{ id: string; name: string }
   return areasCache?.data || [];
 }
 
+let categoryUnitsCache: {
+  timestamp: number;
+  data: Record<string, string>;
+} | null = null;
+
+export async function getCachedCategoryUnits(client: any): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (categoryUnitsCache && now - categoryUnitsCache.timestamp < CACHE_TTL_MS) {
+    return categoryUnitsCache.data;
+  }
+  const { data } = await client
+    .from("app_settings")
+    .select("key, value")
+    .like("key", "cat_unit_%");
+
+  const map: Record<string, string> = {};
+  if (Array.isArray(data)) {
+    for (const row of data) {
+      if (row.key && row.value) {
+        map[row.key] = row.value;
+      }
+    }
+  }
+  categoryUnitsCache = { timestamp: now, data: map };
+  return map;
+}
+
+export function invalidateCategoryUnitsCache(): void {
+  categoryUnitsCache = null;
+  categoriesCache = null;
+}
+
+export const invalidateCategoryCacheServerFn = createServerFn({ method: "POST" })
+  .handler(async () => {
+    invalidateCategoryUnitsCache();
+    return { ok: true };
+  });
+
 function normalizeForSearch(str: string | null | undefined): string {
   if (!str) return "";
   return str
@@ -223,11 +261,19 @@ export const getHomepageDataServerFn = createServerFn({ method: "POST" })
       ]);
 
       const settings: Record<string, string> = {};
+      const unitsMap: Record<string, string> = {};
       for (const s of (settingsRes.data ?? []) as { key: string; value: string }[]) {
         settings[s.key] = s.value;
+        if (s.key && s.key.startsWith("cat_unit_")) {
+          unitsMap[s.key] = s.value;
+        }
       }
+      categoryUnitsCache = { timestamp: Date.now(), data: unitsMap };
 
       const categories = (catsRes.data ?? []) as Category[];
+      for (const cat of categories) {
+        cat.unit_title = settings[`cat_unit_${cat.id}`]?.trim() || cat.unit_title || null;
+      }
       const category_counts: Record<string, number> = {};
       const category_availability: Record<string, CategoryAvailability> = {};
 
@@ -284,12 +330,23 @@ export const getHomepageDataServerFn = createServerFn({ method: "POST" })
         }
       }
 
+      const attachCategoryUnit = (p: HomepageProvider) => {
+        const catId = p.category_id || p.categories?.id;
+        const customUnit = catId ? settings[`cat_unit_${catId}`]?.trim() : undefined;
+        if (p.categories) {
+          (p.categories as any).unit_title = customUnit || (p.categories as any).unit_title || null;
+        } else if (customUnit && catId) {
+          p.categories = { id: catId, name: "", unit_title: customUnit };
+        }
+      };
+
       const allActiveList = (activeRes.data ?? []) as HomepageProvider[];
       for (const p of allActiveList) {
         if (ratings[p.id]) {
           p.average_rating = ratings[p.id].average;
           p.review_count = ratings[p.id].count;
         }
+        attachCategoryUnit(p);
       }
 
       // 1. Featured providers (strictly marked premium by admin)
@@ -299,6 +356,7 @@ export const getHomepageDataServerFn = createServerFn({ method: "POST" })
           p.average_rating = ratings[p.id].average;
           p.review_count = ratings[p.id].count;
         }
+        attachCategoryUnit(p);
       }
 
       // 2. Most Requested (based on analytics event volume)
@@ -343,12 +401,19 @@ export const getHomepageDataServerFn = createServerFn({ method: "POST" })
 export const getCategoriesServerFn = createServerFn({ method: "GET" }).handler(
   async (): Promise<Category[]> => {
     const { supabase } = await import("@/integrations/supabase/client");
-    const { data } = await supabase
-      .from("categories")
-      .select("id,name,icon,sort_order,status")
-      .eq("status", "active")
-      .order("sort_order");
-    return (data ?? []) as Category[];
+    const [catsRes, unitsMap] = await Promise.all([
+      supabase
+        .from("categories")
+        .select("id,name,icon,sort_order,status")
+        .eq("status", "active")
+        .order("sort_order"),
+      getCachedCategoryUnits(supabase),
+    ]);
+    const cats = (catsRes.data ?? []) as Category[];
+    for (const c of cats) {
+      c.unit_title = unitsMap[`cat_unit_${c.id}`]?.trim() || c.unit_title || null;
+    }
+    return cats;
   }
 );
 
@@ -535,8 +600,14 @@ export const getProvidersServerFn = createServerFn({ method: "POST" })
       fullRows = rowsData ?? [];
     }
 
+    const unitsMap = await getCachedCategoryUnits(supabase);
     const rowMap = new Map<string, any>();
     for (const r of fullRows ?? []) {
+      const catId = r.category_id || r.categories?.id;
+      const customUnit = catId ? unitsMap[`cat_unit_${catId}`]?.trim() : undefined;
+      if (r.categories) {
+        r.categories.unit_title = customUnit || (r.categories as any).unit_title || null;
+      }
       const revs = Array.isArray((r as any).reviews)
         ? (r as any).reviews.filter((rev: any) => rev.status === "approved")
         : [];
@@ -569,6 +640,14 @@ export const getProviderDetailServerFn = createServerFn({ method: "POST" })
       .select(PUBLIC_PROVIDER_SELECT)
       .eq("id", id)
       .maybeSingle();
+    if (data) {
+      const unitsMap = await getCachedCategoryUnits(supabase);
+      const catId = (data as any).category_id || (data as any).categories?.id;
+      const customUnit = catId ? unitsMap[`cat_unit_${catId}`]?.trim() : undefined;
+      if ((data as any).categories) {
+        (data as any).categories.unit_title = customUnit || (data as any).categories.unit_title || null;
+      }
+    }
     return data ?? null;
   });
 

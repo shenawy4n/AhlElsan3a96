@@ -132,7 +132,7 @@ export function ProviderCard({
         <div className="mt-1 flex items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">
             <span className="font-bold text-primary">
-              {getCategoryUnit(provider.categories?.name, (provider.categories as any)?.unit_title)}
+              {getCategoryUnit(provider.categories?.name, (provider.categories as any)?.unit_title || (provider as any).category_unit_title)}
             </span>
             <span className="mx-1.5">·</span>
             <MapPin className="inline size-3.5 align-[-2px]" /> {provider.areas?.name}

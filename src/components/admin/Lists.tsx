@@ -81,6 +81,13 @@ export function Categories({
       }
     }
 
+    try {
+      const { invalidateCategoryCacheServerFn } = await import("@/lib/directory.functions");
+      await invalidateCategoryCacheServerFn();
+    } catch {
+      // Non-blocking
+    }
+
     toast.success("تم حفظ القسم بنجاح");
     setForm(null);
     qc.invalidateQueries();

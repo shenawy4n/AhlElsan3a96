@@ -48,9 +48,20 @@ export function useAll() {
   const categories = useQuery({
     queryKey: ["admin", "categories"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("categories").select("*").order("sort_order");
+      const [{ data, error }, { data: settingsData }] = await Promise.all([
+        supabase.from("categories").select("*").order("sort_order"),
+        supabase.from("app_settings").select("key,value").like("key", "cat_unit_%"),
+      ]);
       if (error) throw error;
-      return (data ?? []) as Category[];
+      const unitsMap: Record<string, string> = {};
+      for (const s of (settingsData ?? []) as { key: string; value: string }[]) {
+        if (s.key && s.value) unitsMap[s.key] = s.value;
+      }
+      const cats = (data ?? []) as Category[];
+      for (const c of cats) {
+        c.unit_title = unitsMap[`cat_unit_${c.id}`]?.trim() || c.unit_title || null;
+      }
+      return cats;
     },
   });
   const areas = useQuery({
