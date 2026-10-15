@@ -246,10 +246,21 @@ export const getHomepageDataServerFn = createServerFn({ method: "POST" })
           .select("key,value"),
         featuredQuery,
         activeProvidersQuery,
-        supabase
-          .from("analytics_events")
-          .select("provider_id, event_type")
-          .not("provider_id", "is", null),
+        (async () => {
+          try {
+            const { supabaseAdmin } = await import("../integrations/supabase/client.server");
+            const res = await supabaseAdmin
+              .from("analytics_events")
+              .select("provider_id, event_type")
+              .in("event_type", ["phone_click", "whatsapp_click", "profile_view"])
+              .not("provider_id", "is", null)
+              .order("created_at", { ascending: false })
+              .limit(5000);
+            return res.data ? res : { data: [] };
+          } catch {
+            return { data: [] };
+          }
+        })(),
         supabase
           .from("reviews")
           .select("provider_id, rating")
@@ -322,11 +333,12 @@ export const getHomepageDataServerFn = createServerFn({ method: "POST" })
         };
       }
 
-      // Analytics event counts per provider
+      // Analytics event counts per provider: weight direct contact requests (phone, whatsapp) higher as direct demand
       const eventCounts: Record<string, number> = {};
-      for (const ev of (eventsRes.data ?? []) as { provider_id: string }[]) {
+      for (const ev of (eventsRes.data ?? []) as { provider_id: string; event_type?: string }[]) {
         if (ev.provider_id) {
-          eventCounts[ev.provider_id] = (eventCounts[ev.provider_id] || 0) + 1;
+          const weight = (ev.event_type === "phone_click" || ev.event_type === "whatsapp_click") ? 3 : 1;
+          eventCounts[ev.provider_id] = (eventCounts[ev.provider_id] || 0) + weight;
         }
       }
 

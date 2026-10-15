@@ -1,4 +1,4 @@
-import { telHref, whatsappHref } from "@/lib/directory";
+import { telHref, whatsappHref, getCategoryUnit } from "@/lib/directory";
 import { contactProviderServerFn } from "@/lib/contact.functions";
 
 export type ContactKind = "phone_click" | "whatsapp_click";
@@ -74,20 +74,37 @@ export async function shareProviderViaWhatsapp(provider: {
   id: string;
   name: string;
   categoryName?: string | null | undefined;
+  categoryUnitTitle?: string | null | undefined;
   areaName?: string | null | undefined;
   isEmergency24h?: boolean | undefined;
 }) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const profileUrl = `${origin}/provider/${provider.id}`;
+
+  // 1. Custom category unit title configured by admin, if available and non-empty
+  // 2. Provider's profession or category display name, if available and non-empty
+  // 3. Neutral Arabic fallback: "مقدم خدمة" (never use "صنايعي" as universal fallback)
+  const profession = (provider.categoryUnitTitle && provider.categoryUnitTitle.trim())
+    ? provider.categoryUnitTitle.trim()
+    : (provider.categoryName && provider.categoryName.trim())
+      ? getCategoryUnit(provider.categoryName)
+      : "مقدم خدمة";
+
+  const definiteProfession = profession === "مقدم خدمة"
+    ? "مقدم الخدمة"
+    : profession.startsWith("ال")
+      ? profession
+      : `ال${profession}`;
+
   const lines = [
-    `صنايعي موثوق من «أهل الصنعة» 🛠️`,
+    `${profession} موثوق من «أهل الصنعة»`,
     ``,
     `👤 الاسم: ${provider.name}`,
-    provider.categoryName ? `🏷️ الصنعة: ${provider.categoryName}` : null,
+    provider.categoryName ? `🏷️ التخصص: ${provider.categoryName}` : null,
     provider.areaName ? `📍 المنطقة: ${provider.areaName}` : null,
     provider.isEmergency24h ? `⚡ متاح طوارئ ٢٤ ساعة: نعم` : null,
     ``,
-    `🔗 تواصل مع الصنايعي واطلب الخدمة عبر الرابط:`,
+    `🔗 تواصل مع ${definiteProfession} واطلب الخدمة عبر الرابط:`,
     profileUrl,
     ``,
     `أهل الصنعة — كل صنعة عند أهلها`,

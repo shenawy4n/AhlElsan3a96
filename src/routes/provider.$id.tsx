@@ -118,6 +118,7 @@ function ProviderPage() {
                   providerInfo={{
                     name: p.name,
                     categoryName: p.categories?.name,
+                    categoryUnitTitle: (p.categories as any)?.unit_title || (p as any).category_unit_title,
                     areaName: p.areas?.name,
                     isEmergency24h: parseWorkingHours(p.working_hours)?.isEmergency24h,
                   }}

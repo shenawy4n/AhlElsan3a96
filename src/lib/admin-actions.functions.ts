@@ -406,3 +406,150 @@ export const deleteSuggestionAdminFn = createServerFn({ method: "POST" })
     }
     return { ok: true as const };
   });
+
+/** Fetch pending provider applications / recommendations (Moderator & Admin) */
+export const getAdminApplicationsServerFn = createServerFn({ method: "GET" })
+  .middleware([requireModeratorAuth])
+  .handler(async () => {
+    const { supabaseAdmin } = await import("../integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("provider_applications")
+      .select("id,name,phone,whatsapp,description,services,created_at,categories(name),areas(name)")
+      .eq("status", "pending")
+      .order("created_at");
+
+    if (error) {
+      throw new Response(
+        JSON.stringify({ ok: false, message: error.message }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return (data ?? []) as any[];
+  });
+
+/** Approve or reject provider application / recommendation (Moderator & Admin) */
+export const actApplicationAdminFn = createServerFn({ method: "POST" })
+  .middleware([requireModeratorAuth])
+  .validator((d: { id: string; approve: boolean; reason?: string }) => d)
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("../integrations/supabase/client.server");
+    const { normalizeEgPhone } = await import("./directory");
+
+    const { data: app, error: appErr } = await supabaseAdmin
+      .from("provider_applications")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
+
+    if (appErr || !app) {
+      throw new Response(
+        JSON.stringify({ ok: false, message: "طلب الترشيح غير موجود في النظام" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (app.status !== "pending") {
+      throw new Response(
+        JSON.stringify({ ok: false, message: `الطلب تمت معالجته بالفعل (الحالة: ${app.status})` }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (data.approve) {
+      const normPhone = normalizeEgPhone(app.phone);
+      if (!normPhone) {
+        throw new Response(
+          JSON.stringify({ ok: false, message: "رقم الهاتف غير صالح" }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      const normWa = app.whatsapp ? normalizeEgPhone(app.whatsapp) : null;
+      const normSec = app.secondary_phone ? normalizeEgPhone(app.secondary_phone) : null;
+
+      // Check if phone already active
+      const { data: existing } = await supabaseAdmin
+        .from("providers")
+        .select("id, phone, secondary_phone")
+        .eq("status", "active");
+
+      const isDupe = (existing ?? []).some(
+        (p) =>
+          normalizeEgPhone(p.phone) === normPhone ||
+          (p.secondary_phone && normalizeEgPhone(p.secondary_phone) === normPhone)
+      );
+
+      if (isDupe) {
+        throw new Response(
+          JSON.stringify({ ok: false, message: "يوجد صنايعي نشط بنفس رقم الهاتف بالفعل" }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // Insert provider
+      const { data: newProv, error: insErr } = await supabaseAdmin
+        .from("providers")
+        .insert({
+          name: app.name,
+          phone: normPhone,
+          secondary_phone: normSec,
+          whatsapp: normWa,
+          category_id: app.category_id,
+          area_id: app.area_id,
+          experience_id: app.experience_id,
+          description: app.description,
+          services: app.services,
+          price_description: app.price_description,
+          working_hours: app.working_hours,
+          photo_url: app.photo_url,
+          is_emergency_24h: Boolean(app.is_emergency_24h),
+          has_workshop: Boolean(app.has_workshop),
+          workshop_name: app.workshop_name,
+          workshop_address: app.workshop_address,
+          status: "active",
+        })
+        .select("id")
+        .single();
+
+      if (insErr) {
+        throw new Response(
+          JSON.stringify({ ok: false, message: insErr.message || "تعذر إضافة الصنايعي" }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // Mark application approved
+      await supabaseAdmin
+        .from("provider_applications")
+        .update({
+          status: "approved",
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: context.userId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", data.id);
+
+      return { ok: true as const, providerId: newProv?.id };
+    } else {
+      const reason = data.reason?.trim() || "تم رفض الطلب بواسطة الإدارة";
+      const { error: rejErr } = await supabaseAdmin
+        .from("provider_applications")
+        .update({
+          status: "rejected",
+          rejection_reason: reason,
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: context.userId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", data.id);
+
+      if (rejErr) {
+        throw new Response(
+          JSON.stringify({ ok: false, message: rejErr.message || "تعذر رفض الطلب" }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return { ok: true as const };
+    }
+  });
+

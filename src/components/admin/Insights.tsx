@@ -15,6 +15,8 @@ import {
   updateSuggestionStatusAdminFn,
   approveSuggestionAndCreateCategoryAdminFn,
   deleteSuggestionAdminFn,
+  getAdminApplicationsServerFn,
+  actApplicationAdminFn,
 } from "@/lib/admin-actions.functions";
 
 type Ev = { event_type: string; provider_id: string | null; category_id: string | null };
@@ -1111,7 +1113,23 @@ export function Settings() {
 }
 
 type App = { id: string; name: string; phone: string; whatsapp: string | null; description: string | null; services: string | null; created_at: string; categories: { name: string } | null; areas: { name: string } | null };
-const APP_ERR: Record<string, string> = { duplicate_phone: "فيه صنايعي بنفس الرقم", not_pending: "الطلب اتراجع قبل كده", invalid_phone: "الرقم مش صحيح", invalid_reason: "اكتب سبب الرفض" };
+
+const APP_ERR_PATTERNS: Array<[RegExp, string]> = [
+  [/already active|duplicate_phone|مسجل بالفعل/i, "يوجد مقدم خدمة مسجل ومفعل بنفس رقم الهاتف بالفعل"],
+  [/not pending|not in pending|اتراجع قبل/i, "تمت مراجعة هذا الطلب من قبل أو لم يعد معلقاً"],
+  [/rejection reason|invalid_reason/i, "سبب الرفض مطلوب ويجب ألا يقل عن 3 أحرف"],
+  [/Egyptian mobile|invalid_phone/i, "رقم الهاتف غير صالح كمعيار هاتف مصري"],
+  [/unauthorized|admin role required/i, "الإجراء يتطلب صلاحيات مسؤول النظام (Admin)"],
+  [/not found|غير موجود/i, "طلب الترشيح غير موجود في النظام"],
+];
+
+function getAppErrorMessage(err: { message?: string } | null | undefined): string {
+  if (!err?.message) return "تعذر إتمام الإجراء، يرجى المحاولة مرة أخرى";
+  for (const [pattern, msg] of APP_ERR_PATTERNS) {
+    if (pattern.test(err.message)) return msg;
+  }
+  return err.message;
+}
 
 export function Applications() {
   const qc = useQueryClient();
@@ -1119,6 +1137,12 @@ export function Applications() {
   const apps = useQuery({
     queryKey: ["admin", "applications"],
     queryFn: async () => {
+      try {
+        const res = await getAdminApplicationsServerFn();
+        if (Array.isArray(res)) return res as unknown as App[];
+      } catch {
+        // Fallback to client query
+      }
       const { data, error } = await supabase.from("provider_applications")
         .select("id,name,phone,whatsapp,description,services,created_at,categories(name),areas(name)")
         .eq("status", "pending").order("created_at");
@@ -1126,17 +1150,61 @@ export function Applications() {
       return (data ?? []) as unknown as App[];
     },
   });
+
   async function act(id: string, approve: boolean) {
-    let reason = "تم رفض الطلب بواسطة الإدارة";
+    if (busy) return;
+    const reason = "تم رفض الطلب بواسطة الإدارة";
     setBusy(id);
-    const { error } = approve
-      ? await supabase.rpc("approve_application", { _id: id })
-      : await supabase.rpc("reject_application", { _id: id, _reason: reason });
-    setBusy(null);
-    if (error) { const k = Object.keys(APP_ERR).find((x) => error.message.includes(x)); toast.error(k ? APP_ERR[k]! : "حصلت مشكلة"); return; }
-    toast.success(approve ? "تم القبول ونشر الصنايعي" : "تم الرفض");
-    qc.invalidateQueries({ queryKey: ["admin"] });
+
+    try {
+      // 1. Try server function first for robust authentication & role checks
+      try {
+        const res = await actApplicationAdminFn({ data: { id, approve, reason } });
+        if ((res as any)?.ok) {
+          toast.success(approve ? "تم القبول ونشر مقدم الخدمة بنجاح" : "تم رفض الطلب بنجاح");
+          qc.invalidateQueries({ queryKey: ["admin"] });
+          return;
+        }
+      } catch (serverErr: any) {
+        // If server function threw a meaningful message, parse and show or fall through to RPC
+        let parsedMsg: string | null = null;
+        try {
+          if (serverErr?.message) {
+            const parsed = JSON.parse(serverErr.message);
+            parsedMsg = parsed.message || parsed.error;
+          }
+        } catch {}
+        if (parsedMsg && !parsedMsg.includes("Unauthorized")) {
+          toast.error(parsedMsg);
+          return;
+        }
+      }
+
+      // 2. Fallback to client PostgreSQL RPC
+      let res = approve
+        ? await supabase.rpc("approve_application", { app_id: id } as any)
+        : await supabase.rpc("reject_application", { app_id: id, reason } as any);
+
+      if (res.error && (res.error.code === "PGRST202" || res.error.message?.includes("schema cache"))) {
+        res = approve
+          ? await supabase.rpc("approve_application", { _id: id } as any)
+          : await supabase.rpc("reject_application", { _id: id, _reason: reason } as any);
+      }
+
+      if (res.error) {
+        toast.error(getAppErrorMessage(res.error));
+        return;
+      }
+
+      toast.success(approve ? "تم القبول ونشر مقدم الخدمة بنجاح" : "تم رفض الطلب بنجاح");
+      qc.invalidateQueries({ queryKey: ["admin"] });
+    } catch (err: any) {
+      toast.error(err?.message || "حدث خطأ غير متوقع أثناء معالجة الطلب");
+    } finally {
+      setBusy(null);
+    }
   }
+
   if (apps.isLoading) return <p className="p-8 text-center text-muted-foreground font-bold">جاري التحميل...</p>;
   if (apps.isError) return <AdminErrorState title="تعذر تحميل طلبات انضمام العمال" error={apps.error} onRetry={() => apps.refetch()} />;
   const list = apps.data ?? [];
@@ -1151,8 +1219,12 @@ export function Applications() {
           {a.description && <p className="text-sm">{a.description}</p>}
           {a.services && <p className="text-sm text-muted-foreground">{a.services}</p>}
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <button disabled={busy === a.id} onClick={() => act(a.id, true)} className={btn}>قبول</button>
-            <button disabled={busy === a.id} onClick={() => act(a.id, false)} className={btnGhost}>رفض</button>
+            <button disabled={Boolean(busy)} onClick={() => act(a.id, true)} className={btn}>
+              {busy === a.id ? "جاري..." : "قبول"}
+            </button>
+            <button disabled={Boolean(busy)} onClick={() => act(a.id, false)} className={btnGhost}>
+              {busy === a.id ? "جاري..." : "رفض"}
+            </button>
           </div>
         </div>
       ))}

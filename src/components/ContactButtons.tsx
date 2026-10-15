@@ -6,6 +6,7 @@ import { callProvider, whatsappProvider, shareProviderViaWhatsapp, RateLimitErro
 export interface ProviderShareInfo {
   name: string;
   categoryName?: string | null | undefined;
+  categoryUnitTitle?: string | null | undefined;
   areaName?: string | null | undefined;
   isEmergency24h?: boolean | undefined;
 }
@@ -48,8 +49,9 @@ export function ContactButtons({
     try {
       await shareProviderViaWhatsapp({
         id: providerId,
-        name: providerInfo?.name || "صنايعي",
+        name: providerInfo?.name || "مقدم خدمة",
         categoryName: providerInfo?.categoryName,
+        categoryUnitTitle: providerInfo?.categoryUnitTitle,
         areaName: providerInfo?.areaName,
         isEmergency24h: providerInfo?.isEmergency24h,
       });

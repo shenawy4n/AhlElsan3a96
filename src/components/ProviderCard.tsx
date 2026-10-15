@@ -203,6 +203,7 @@ export function ProviderCard({
           providerInfo={{
             name: provider.name,
             categoryName: provider.categories?.name,
+            categoryUnitTitle: (provider.categories as any)?.unit_title || (provider as any).category_unit_title,
             areaName: provider.areas?.name,
             isEmergency24h: hoursData?.isEmergency24h,
           }}
